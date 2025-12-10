@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-box">
+        <h1><i class="fas fa-user-plus"></i> Criar Conta</h1>
+        <p class="subtitle">Cadastre-se para começar a postar</p>
+        
+        {% if error %}
+        <div class="error-message">{{ error }}</div>
+        {% endif %}
+        
+        <form method="POST" action="{{ url_for('register') }}" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="username">Nome de usuário:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Senha:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="bio">Frase sobre você (opcional):</label>
+                <textarea id="bio" name="bio" rows="2" maxlength="200"></textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="profile_pic">Foto de perfil (opcional):</label>
+                <input type="file" id="profile_pic" name="profile_pic" accept="image/*">
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Criar Conta</button>
+        </form>
+        
+        <div class="auth-links">
+            <p>Já tem uma conta? <a href="{{ url_for('login') }}">Faça login</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

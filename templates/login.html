@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="auth-container">
+    <div class="auth-box">
+        <h1><i class="fas fa-users"></i> rede nao social </h1>
+        <p class="subtitle">Faça login para acessar</p>
+        
+        {% if error %}
+        <div class="error-message">{{ error }}</div>
+        {% endif %}
+        
+        <form method="POST" action="{{ url_for('login') }}">
+            <div class="form-group">
+                <label for="username">Nome de usuário:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            
+            <div class="form-group">
+                <label for="password">Senha:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary">Entrar</button>
+        </form>
+        
+        <div class="auth-links">
+            <p>Não tem uma conta? <a href="{{ url_for('register') }}">Cadastre-se</a></p>
+        </div>
+    </div>
+</div>
+{% endblock %}

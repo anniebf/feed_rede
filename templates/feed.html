@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="feed-container">
+    <header class="feed-header">
+        <h1><i class="fas fa-stream"></i>PostaAi</h1>
+        <div class="user-info">
+            <span>Olá, <strong>{{ username }}</strong>!</span>
+            <a href="{{ url_for('logout') }}" class="btn-logout">Sair</a>
+        </div>
+    </header>
+    
+    <div class="main-content">
+        <div class="create-post">
+            <h3>Criar Nova Postagem</h3>
+            <form method="POST" action="{{ url_for('create_post') }}" enctype="multipart/form-data" id="post-form">
+                <div class="post-type-selector">
+                    <button type="button" class="type-btn active" data-type="text"><i class="fas fa-font"></i> Texto</button>
+                    <button type="button" class="type-btn" data-type="image"><i class="fas fa-image"></i> Imagem</button>
+                    <button type="button" class="type-btn" data-type="video"><i class="fas fa-video"></i> Vídeo</button>
+                </div>
+                
+                <div class="form-group">
+                    <textarea id="content" name="content" rows="3" placeholder="O que você está pensando?" required></textarea>
+                </div>
+                
+                <div class="form-group" id="media-upload" style="display: none;">
+                    <label for="media">Arquivo:</label>
+                    <input type="file" id="media" name="media" accept="image/*,video/*">
+                </div>
+                
+                <input type="hidden" id="post-type" name="type" value="text">
+                
+                <button type="submit" class="btn btn-primary">Postar</button>
+            </form>
+        </div>
+        
+        <div class="posts-section">
+            <h3>Postagens Recentes</h3>
+            
+            {% if posts %}
+                {% for post in posts %}
+                <div class="post">
+                    <div class="post-header">
+                        <div class="user-avatar" data-user-id="{{ post.author.id }}">
+                            <img src="{{ url_for('static', filename='uploads/' + post.author.profile_pic) }}" alt="{{ post.author.username }}">
+                            <span class="username">{{ post.author.username }}</span>
+                        </div>
+                        <div class="post-date">{{ post.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
+                    </div>
+                    
+                    <div class="post-content">
+                        {% if post.type == 'text' %}
+                            <p>{{ post.content }}</p>
+                        {% elif post.type == 'image' %}
+                            <p>{{ post.content }}</p>
+                            {% if post.media_path %}
+                                <div class="post-media">
+                                    <img src="{{ url_for('static', filename='uploads/' + post.media_path) }}" alt="Imagem postada">
+                                </div>
+                            {% endif %}
+                        {% elif post.type == 'video' %}
+                            <p>{{ post.content }}</p>
+                            {% if post.media_path %}
+                                <div class="post-media">
+                                    <video controls>
+                                        <source src="{{ url_for('static', filename='uploads/' + post.media_path) }}" type="video/mp4">
+                                        Seu navegador não suporta o elemento de vídeo.
+                                    </video>
+                                </div>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    
+                    <div class="post-footer">
+                        <span class="post-type">
+                            {% if post.type == 'text' %}
+                                <i class="fas fa-font"></i> Texto
+                            {% elif post.type == 'image' %}
+                                <i class="fas fa-image"></i> Imagem
+                            {% elif post.type == 'video' %}
+                                <i class="fas fa-video"></i> Vídeo
+                            {% endif %}
+                        </span>
+                    </div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div class="no-posts">
+                    <p>Nenhuma postagem ainda. Seja o primeiro a postar!</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div id="user-popup" class="user-popup"></div>
+{% endblock %}
