@@ -81,12 +81,12 @@
                         <div class="post-actions">
                             <button class="action-btn like-btn" data-post-id="{{ post.id }}"
                                 data-is-liked="{{ post.is_liked_by_user | lower }}">
-                                <i class="{{ 'fas' if post.is_liked_by_user else 'far' }} fa-heart"></i>
+                                <i class="{{ 'fas' if post.is_liked_by_user else 'far' }} fa-star"></i>
                                 <span class="likes-count">{{ post.likes_count }}</span>
                             </button>
 
                             <button class="action-btn comment-btn" data-post-id="{{ post.id }}">
-                                <i class="fas fa-pencil-alt"></i>
+                                <i class="fas fa-comment"></i>
                                 <span class="comments-count">{{ post.comments | length }}</span>
                             </button>
                         </div>
@@ -451,21 +451,17 @@
 </script>
 
 {% endblock %}
-
 {% block extra_styles %}
 <style>
-/* ... (Seu CSS para os estilos do feed e do avatar, incluindo .my-profile-pic-container) ... */
-/* Estilos para o container do avatar no header */
+/* Estilos específicos para o feed mobile */
 .my-profile-pic-container {
     position: relative;
-    width: 50px; /* Ajuste o tamanho do seu avatar */
-    height: 50px;
+    width: clamp(40px, 10vw, 50px);
+    height: clamp(40px, 10vw, 50px);
     border-radius: 50%;
     cursor: pointer;
     overflow: hidden;
-    display: inline-block;
-    vertical-align: middle;
-    margin-right: 10px;
+    flex-shrink: 0;
 }
 
 .my-profile-pic-container img {
@@ -475,7 +471,6 @@
     transition: filter 0.3s ease;
 }
 
-/* Oculta a overlay por padrão */
 .profile-pic-overlay {
     position: absolute;
     top: 0;
@@ -491,50 +486,104 @@
     opacity: 0;
     transition: opacity 0.3s ease;
     text-align: center;
-    font-size: 0.75em;
+    font-size: clamp(0.65rem, 2vw, 0.75rem);
     line-height: 1.1;
+    padding: 4px;
 }
 
 .profile-pic-overlay i {
-    font-size: 1.2em;
+    font-size: clamp(1rem, 3vw, 1.2rem);
     margin-bottom: 2px;
 }
 
-/* Efeito de hover: a overlay aparece e a imagem escurece */
-.my-profile-pic-container:hover .profile-pic-overlay {
-    opacity: 1;
+/* Melhorias para ação de curtir em mobile */
+.like-btn {
+    background: linear-gradient(135deg, rgba(255, 55, 94, 0.1), rgba(255, 86, 123, 0.1)) !important;
+    border: 2px solid rgba(255, 55, 94, 0.2) !important;
+    color: #ff375e !important;
 }
 
-.my-profile-pic-container:hover img {
-    filter: brightness(0.7);
+.like-btn[data-is-liked="true"] {
+    background: linear-gradient(135deg, #ff375e 0%, #ff6b9d 100%) !important;
+    color: white !important;
+    border-color: transparent !important;
 }
 
-.feed-header .user-info {
-    display: flex;
-    align-items: center;
-}
-.post {
-    /* Garante que o post tenha um limite de largura, se o layout principal não o fizer */
-    max-width: 600px; /* Escolha um valor adequado para a largura máxima da sua coluna de feed */
-    width: 100%; /* Garante que ele ocupe 100% da largura disponível até o max-width */
-    margin: 15px auto; /* Centraliza a postagem */
-    /* Outros estilos como borda e padding que você já deve ter */
-    box-sizing: border-box; /* Crucial para garantir que padding e border não causem estouro */
+.comment-btn {
+    background: linear-gradient(135deg, rgba(29, 155, 240, 0.1), rgba(90, 178, 243, 0.1)) !important;
+    border: 2px solid rgba(29, 155, 240, 0.2) !important;
+    color: #1d9bf0 !important;
 }
 
-/* Garante que o conteúdo interno (onde a imagem está) respeite 100% do .post */
-.post-content {
-    /* Isso geralmente já é o padrão, mas vale a pena garantir */
-    width: 100%;
-    overflow-wrap: break-word; /* Ajuda se houver texto muito longo */
+/* Melhorias para formulário de comentário em mobile */
+.comment-input {
+    font-size: 16px !important; /* Previne zoom no iOS */
 }
 
-/* Mantém as regras que você já aplicou (mas certifique-se de que não há regras conflitantes mais abaixo) */
-.post-content .post-media-img,
-.post-content .post-media-video {
-    max-width: 100%;
-    height: auto;
-    display: block; /* Garante que a imagem se comporte como um bloco e preencha corretamente */
+/* Ajustes para popup em mobile */
+@media (max-width: 768px) {
+    .user-popup {
+        position: fixed;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        width: 90vw !important;
+        max-width: 320px !important;
+        z-index: 10000;
+    }
+}
+
+/* Melhorias de toque para botões em mobile */
+@media (hover: none) and (pointer: coarse) {
+    .action-btn {
+        min-height: 44px;
+        padding: 12px 16px;
+    }
+
+    .like-btn:hover,
+    .comment-btn:hover {
+        transform: none !important;
+    }
+
+    .like-btn:active,
+    .comment-btn:active {
+        transform: scale(0.98) !important;
+    }
+}
+
+/* Suporte para telas muito pequenas */
+@media (max-width: 360px) {
+    .feed-header {
+        padding: var(--spacing-sm);
+    }
+
+    .create-post,
+    .post {
+        padding: var(--spacing-sm);
+    }
+
+    .btn-logout {
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+}
+
+/* Suporte para modo escuro */
+@media (prefers-color-scheme: dark) {
+    .post,
+    .create-post {
+        background: #1a1a1a;
+        color: #ffffff;
+        border-color: #333;
+    }
+
+    .form-group input,
+    .form-group textarea,
+    .form-group select {
+        background: #2a2a2a;
+        border-color: #444;
+        color: #ffffff;
+    }
 }
 </style>
 {% endblock %}
