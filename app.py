@@ -1,9 +1,10 @@
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify
-from database import db, User, Post
+from database import db, User, Post, Like, Comment
 from werkzeug.security import generate_password_hash, check_password_hash
 from werkzeug.utils import secure_filename
 import os
 from datetime import datetime
+from sqlalchemy.orm import joinedload, selectinload
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'chave-super-ultra-secreta-db'
@@ -148,33 +149,63 @@ def upload_profile_pic():
 
         return jsonify({'success': False, 'message': f'Erro interno do servidor. Consulte o console.'}), 500
 
+
 @app.route('/feed')
 def feed():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
+    user_id = session['user_id']
+
     # 1. Buscar o usuário logado
-    current_user = User.query.get(session['user_id'])
+    current_user = User.query.get(user_id)
 
     # Garantir que o usuário foi encontrado (boa prática)
     if not current_user:
-        # Se o ID na sessão for inválido, limpa a sessão e redireciona
         session.clear()
         return redirect(url_for('login'))
 
     # 2. Obter o nome do arquivo da foto de perfil
     profile_pic_filename = current_user.profile_pic
 
-    # 3. Buscar todos os posts ordenados por data
-    posts = Post.query.order_by(Post.created_at.desc()).all()
+    # 3. Consulta Avançada (SQLAlchemy Query)
+    # Prepara a cláusula de LIKE (se o usuário curtiu)
+    subquery_is_liked = db.exists().where(
+        Like.post_id == Post.id,
+        Like.user_id == user_id
+    ).correlate_except(Like)
 
-    # 4. Passar a variável extra para o template
+    posts_data = db.session.query(
+        Post,
+        db.func.count(Like.id).label('likes_count'),
+        subquery_is_liked.label('is_liked_by_user')
+    ).outerjoin(Like, Post.id == Like.post_id) \
+        .outerjoin(Comment, Post.id == Comment.post_id) \
+        .options(
+        joinedload(Post.author),
+        selectinload(Post.comments).joinedload(Comment.author)
+    ) \
+        .group_by(Post.id) \
+        .order_by(Post.created_at.desc()) \
+        .all()
+
+    # 4. Formata os dados para o template Jinja2
+    posts_with_info = []
+    for post, likes_count, is_liked_by_user in posts_data:
+        # Anexa os dados calculados dinamicamente ao objeto Post
+        post.likes_count = likes_count
+        post.is_liked_by_user = is_liked_by_user
+
+        # O SQLAlchemy/Jinja2 agora também permite acessar os comentários (post.comments)
+        posts_with_info.append(post)
+
+    # 5. Passar as variáveis para o template
     return render_template(
         'feed.html',
-        posts=posts,
+        posts=posts_with_info,  # Usa a lista enriquecida com likes/curtidas
         username=session['username'],
-        # NOVO CONTEXTO: Passa o nome do arquivo da foto de perfil
-        my_profile_pic=profile_pic_filename
+        my_profile_pic=profile_pic_filename,
+        Comment = Comment
     )
 
 
@@ -190,7 +221,7 @@ def create_post():
         user_id=session['user_id'],
         content=content,
         type=post_type,
-        created_at=datetime.utcnow()
+        #created_at=datetime.utcnow()  # Atribui o valor de data/hora
     )
 
     # Processa arquivo se existir
@@ -222,6 +253,74 @@ def get_user_info(user_id):
         })
     return jsonify({'error': 'Usuário não encontrado'})
 
+
+@app.route('/toggle_like/<int:post_id>', methods=['POST'])
+def toggle_like(post_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+    user_id = session['user_id']
+
+    # 1. Tenta encontrar a curtida existente
+    existing_like = Like.query.filter_by(user_id=user_id, post_id=post_id).first()
+
+    if existing_like:
+        # 2. Se existe, remove a curtida (unlike)
+        db.session.delete(existing_like)
+        liked = False
+    else:
+        # 3. Se não existe, adiciona a curtida (like)
+        new_like = Like(user_id=user_id, post_id=post_id)
+        db.session.add(new_like)
+        liked = True
+
+    db.session.commit()
+
+    # 4. Conta o novo total de likes
+    total_likes = Like.query.filter_by(post_id=post_id).count()
+
+    return jsonify({
+        'success': True,
+        'liked': liked,
+        'likes_count': total_likes
+    })
+
+
+@app.route('/add_comment/<int:post_id>', methods=['POST'])
+def add_comment(post_id):
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+    content = request.json.get('content')
+
+    if not content or not content.strip():
+        return jsonify({'success': False, 'message': 'O comentário não pode ser vazio'}), 400
+
+    user_id = session['user_id']
+
+    # 1. Cria o novo comentário
+    new_comment = Comment(
+        user_id=user_id,
+        post_id=post_id,
+        content=content.strip(),
+        created_at=datetime.utcnow()
+    )
+
+    db.session.add(new_comment)
+    db.session.commit()
+
+    # 2. Prepara os dados do novo comentário para retornar ao JS
+    comment_data = {
+        'username': session['username'],
+        'content': new_comment.content,
+        'comments_count': Comment.query.filter_by(post_id=post_id).count()
+    }
+
+    return jsonify({
+        'success': True,
+        'message': 'Comentário adicionado com sucesso',
+        'comment': comment_data
+    })
 
 @app.route('/logout')
 def logout():

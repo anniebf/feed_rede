@@ -1,9 +1,5 @@
 document.addEventListener('DOMContentLoaded', function() {
-    // --- Variáveis Comuns ---
-    const userPopup = document.getElementById('user-popup');
-    let popupTimeout;
-
-    // --- 1. Controle dos Tipos de Postagem (Mantido) ---
+    // Controle dos tipos de postagem
     const typeButtons = document.querySelectorAll('.type-btn');
     const postTypeInput = document.getElementById('post-type');
     const mediaUpload = document.getElementById('media-upload');
@@ -15,11 +11,15 @@ document.addEventListener('DOMContentLoaded', function() {
             button.addEventListener('click', function() {
                 // Remove a classe active de todos os botões
                 typeButtons.forEach(btn => btn.classList.remove('active'));
+
+                // Adiciona a classe active ao botão clicado
                 this.classList.add('active');
 
+                // Atualiza o tipo de postagem
                 const type = this.getAttribute('data-type');
                 postTypeInput.value = type;
 
+                // Mostra ou esconde o campo de upload de mídia
                 if (type === 'text') {
                     mediaUpload.style.display = 'none';
                     mediaInput.removeAttribute('required');
@@ -40,73 +40,12 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    // --- 2. Lógica de Upload da Foto de Perfil (NOVA LÓGICA) ---
-    const myPicContainer = document.querySelector('.my-profile-pic-container');
-    const fileInput = document.getElementById('profile-pic-input');
-    const profilePicImg = document.getElementById('my-profile-pic');
-
-    if (myPicContainer && fileInput && profilePicImg) {
-        // A) Ao clicar no avatar logado, abre o seletor de arquivo
-        myPicContainer.addEventListener('click', function() {
-            fileInput.click();
-        });
-
-        // B) Ao selecionar o arquivo, envia o formulário via Fetch API
-        fileInput.addEventListener('change', function() {
-            if (fileInput.files.length > 0) {
-                // Prepara os dados para o envio
-                const formData = new FormData();
-                // O nome 'profile_pic_file' deve corresponder ao que é esperado no app.py
-                formData.append('profile_pic_file', fileInput.files[0]);
-
-                // Exibe uma mensagem de carregamento ou desabilita o clique, se necessário
-                myPicContainer.style.cursor = 'wait';
-
-                // Envio assíncrono para o backend
-                fetch('{{ url_for("upload_profile_pic") }}', {
-                    method: 'POST',
-                    body: formData
-                })
-                .then(response => {
-                    myPicContainer.style.cursor = 'pointer'; // Retorna o cursor normal
-                    // Verifica se a resposta HTTP é OK (status 200)
-                    if (!response.ok) {
-                        return response.json().then(err => { throw new Error(err.message || 'Erro no servidor.'); });
-                    }
-                    return response.json();
-                })
-                .then(data => {
-                    if (data.success) {
-                        // Atualiza a imagem no DOM
-                        profilePicImg.src = data.new_pic_url;
-                        alert(data.message);
-                    } else {
-                        alert('Erro ao atualizar foto: ' + data.message);
-                    }
-                })
-                .catch(error => {
-                    myPicContainer.style.cursor = 'pointer';
-                    console.error('Erro de upload:', error);
-                    alert(`Falha no upload: ${error.message}`);
-                });
-            }
-        });
-    }
-
-    // --- 3. Popup de Informações do Usuário (Modificado para excluir o usuário logado) ---
+    // Popup de informações do usuário
     const userAvatars = document.querySelectorAll('.user-avatar');
+    const userPopup = document.getElementById('user-popup');
+    let popupTimeout;
 
     userAvatars.forEach(avatar => {
-        // Verifica se é o avatar do usuário logado (se contém a classe my-profile-pic-container)
-        const isMyAvatar = avatar.classList.contains('my-profile-pic-container');
-
-        // Se for o seu avatar, a lógica de popup é ignorada em favor da lógica de upload (ponto 2)
-        if (isMyAvatar) {
-            // A lógica de hover para o seu avatar é puramente CSS
-            return;
-        }
-
-        // Lógica de Popup para OUTROS avatares
         avatar.addEventListener('mouseenter', function(e) {
             clearTimeout(popupTimeout);
 
@@ -124,10 +63,8 @@ document.addEventListener('DOMContentLoaded', function() {
 
                     // Posiciona e mostra o popup
                     const rect = this.getBoundingClientRect();
-                    // Ajuste o posicionamento aqui, se necessário
-                    userPopup.style.left = `${rect.left + rect.width / 2}px`; // Centraliza
+                    userPopup.style.left = `${rect.left}px`;
                     userPopup.style.top = `${rect.bottom + 10}px`;
-                    userPopup.style.transform = 'translateX(-50%)'; // Centraliza
 
                     // Conteúdo do popup
                     userPopup.innerHTML = `
@@ -152,8 +89,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 userPopup.classList.remove('active');
             }, 300);
         });
+    });
 
-        // Para dispositivos touch (Mantenha o touchend mais longo para visualização)
+    // Impede que o popup feche quando o mouse estiver sobre ele
+    userPopup.addEventListener('mouseenter', function() {
+        clearTimeout(popupTimeout);
+    });
+
+    userPopup.addEventListener('mouseleave', function() {
+        this.classList.remove('active');
+    });
+
+    // Para dispositivos touch
+    userAvatars.forEach(avatar => {
         avatar.addEventListener('touchstart', function(e) {
             e.preventDefault();
             this.dispatchEvent(new Event('mouseenter'));
@@ -167,17 +115,7 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
-    // Impede que o popup feche quando o mouse estiver sobre ele (Mantido)
-    userPopup.addEventListener('mouseenter', function() {
-        clearTimeout(popupTimeout);
-    });
-
-    userPopup.addEventListener('mouseleave', function() {
-        this.classList.remove('active');
-    });
-
-
-    // --- 4. Validação do formulário de postagem (Mantido) ---
+    // Validação do formulário de postagem
     const postForm = document.getElementById('post-form');
     if (postForm) {
         postForm.addEventListener('submit', function(e) {
