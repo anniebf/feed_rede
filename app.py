@@ -90,14 +90,92 @@ def register():
     return render_template('register.html')
 
 
+@app.route('/upload_profile_pic', methods=['POST'])
+def upload_profile_pic():
+    try:  # <--- INÍCIO DO TRATAMENTO DE ERROS
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'message': 'Não autenticado'}), 401
+
+        # O nome do input no HTML é 'profile_pic_file'
+        if 'profile_pic_file' not in request.files:
+            return jsonify({'success': False, 'message': 'Nenhum arquivo enviado'}), 400
+
+        file = request.files['profile_pic_file']
+        user_id = session['user_id']
+
+        if file.filename == '':
+            return jsonify({'success': False, 'message': 'Nenhum arquivo selecionado'}), 400
+
+        if file and allowed_file(file.filename):
+
+            file_ext = file.filename.rsplit('.', 1)[1].lower()
+            filename = secure_filename(f"{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.{file_ext}")
+
+            # 2. Salvar o arquivo no disco (Pode falhar por permissão/caminho)
+            save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            file.save(save_path)  # <--- ERRO DE PERMISSÃO OU DISCO GERALMENTE OCORRE AQUI
+
+            # 3. Atualizar o banco de dados
+            user = User.query.get(user_id)
+            if user:
+                # Opcional: Remover a foto antiga
+                if user.profile_pic != 'default.png':
+                    old_path = os.path.join(app.config['UPLOAD_FOLDER'], user.profile_pic)
+                    if os.path.exists(old_path):
+                        os.remove(old_path)
+
+                user.profile_pic = filename
+                db.session.commit()
+
+                new_pic_url = url_for('static', filename=f'uploads/{filename}')
+                return jsonify(
+                    {'success': True, 'message': 'Foto de perfil atualizada com sucesso', 'new_pic_url': new_pic_url})
+            else:
+                os.remove(save_path)
+                return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 404
+        else:
+            return jsonify({'success': False, 'message': 'Extensão de arquivo não permitida'}), 400
+
+    except Exception as e:
+        # FIM DO TRATAMENTO DE ERROS: Isso garante que a resposta seja SEMPRE JSON
+        # Imprime o erro no seu console do terminal para depuração
+        print(f"ERRO CRÍTICO NO UPLOAD DE PERFIL (app.py): {e}")
+        # Tenta reverter qualquer transação de banco de dados
+        try:
+            db.session.rollback()
+        except:
+            pass  # Ignora se a sessão não estiver ativa
+
+        return jsonify({'success': False, 'message': f'Erro interno do servidor. Consulte o console.'}), 500
+
 @app.route('/feed')
 def feed():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    # Busca todos os posts ordenados por data
+    # 1. Buscar o usuário logado
+    current_user = User.query.get(session['user_id'])
+
+    # Garantir que o usuário foi encontrado (boa prática)
+    if not current_user:
+        # Se o ID na sessão for inválido, limpa a sessão e redireciona
+        session.clear()
+        return redirect(url_for('login'))
+
+    # 2. Obter o nome do arquivo da foto de perfil
+    profile_pic_filename = current_user.profile_pic
+
+    # 3. Buscar todos os posts ordenados por data
     posts = Post.query.order_by(Post.created_at.desc()).all()
-    return render_template('feed.html', posts=posts, username=session['username'])
+
+    # 4. Passar a variável extra para o template
+    return render_template(
+        'feed.html',
+        posts=posts,
+        username=session['username'],
+        # NOVO CONTEXTO: Passa o nome do arquivo da foto de perfil
+        my_profile_pic=profile_pic_filename
+    )
 
 
 @app.route('/create_post', methods=['POST'])
@@ -161,4 +239,4 @@ def create_tables():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=8080)

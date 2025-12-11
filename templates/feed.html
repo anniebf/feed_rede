@@ -4,12 +4,22 @@
 <div class="feed-container">
     <header class="feed-header">
         <h1><i class="fas fa-stream"></i>PostaAi</h1>
-        <div class="user-info">
+        <div class="user-info logged-in-user">
+            <div class="user-avatar my-profile-pic-container" data-user-id="{{ session['user_id'] }}">
+                <img id="my-profile-pic"
+                     src="{{ url_for('static', filename='uploads/' + my_profile_pic) }}"
+                     alt="{{ username }}">
+                <div class="profile-pic-overlay" id="profile-pic-overlay">
+                    <i class="fas fa-camera"></i>
+                    <span>Alterar Foto</span>
+                </div>
+            </div>
+
             <span>Olá, <strong>{{ username }}</strong>!</span>
             <a href="{{ url_for('logout') }}" class="btn-logout">Sair</a>
         </div>
     </header>
-    
+
     <div class="main-content">
         <div class="create-post">
             <h3>Criar Nova Postagem</h3>
@@ -19,25 +29,25 @@
                     <button type="button" class="type-btn" data-type="image"><i class="fas fa-image"></i> Imagem</button>
                     <button type="button" class="type-btn" data-type="video"><i class="fas fa-video"></i> Vídeo</button>
                 </div>
-                
+
                 <div class="form-group">
                     <textarea id="content" name="content" rows="3" placeholder="O que você está pensando?" required></textarea>
                 </div>
-                
+
                 <div class="form-group" id="media-upload" style="display: none;">
                     <label for="media">Arquivo:</label>
                     <input type="file" id="media" name="media" accept="image/*,video/*">
                 </div>
-                
+
                 <input type="hidden" id="post-type" name="type" value="text">
-                
+
                 <button type="submit" class="btn btn-primary">Postar</button>
             </form>
         </div>
-        
+
         <div class="posts-section">
             <h3>Postagens Recentes</h3>
-            
+
             {% if posts %}
                 {% for post in posts %}
                 <div class="post">
@@ -48,7 +58,7 @@
                         </div>
                         <div class="post-date">{{ post.created_at.strftime('%d/%m/%Y %H:%M') }}</div>
                     </div>
-                    
+
                     <div class="post-content">
                         {% if post.type == 'text' %}
                             <p>{{ post.content }}</p>
@@ -71,7 +81,7 @@
                             {% endif %}
                         {% endif %}
                     </div>
-                    
+
                     <div class="post-footer">
                         <span class="post-type">
                             {% if post.type == 'text' %}
@@ -94,5 +104,278 @@
     </div>
 </div>
 
+<form id="upload-form" method="POST" action="{{ url_for('upload_profile_pic') }}" enctype="multipart/form-data" style="display: none;">
+    <input type="file" id="profile-pic-input" name="profile_pic_file" accept="image/*">
+</form>
+
 <div id="user-popup" class="user-popup"></div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- Variáveis Comuns ---
+        const userPopup = document.getElementById('user-popup');
+        let popupTimeout;
+
+        // --- 1. Controle dos Tipos de Postagem (Mantido) ---
+        const typeButtons = document.querySelectorAll('.type-btn');
+        const postTypeInput = document.getElementById('post-type');
+        const mediaUpload = document.getElementById('media-upload');
+        const mediaInput = document.getElementById('media');
+        const contentTextarea = document.getElementById('content');
+
+        if (typeButtons.length > 0) {
+            typeButtons.forEach(button => {
+                button.addEventListener('click', function() {
+                    // Remove a classe active de todos os botões
+                    typeButtons.forEach(btn => btn.classList.remove('active'));
+                    this.classList.add('active');
+
+                    const type = this.getAttribute('data-type');
+                    postTypeInput.value = type;
+
+                    if (type === 'text') {
+                        mediaUpload.style.display = 'none';
+                        mediaInput.removeAttribute('required');
+                        contentTextarea.setAttribute('placeholder', 'O que você está pensando?');
+                    } else {
+                        mediaUpload.style.display = 'block';
+                        mediaInput.setAttribute('required', 'required');
+
+                        if (type === 'image') {
+                            mediaInput.setAttribute('accept', 'image/*');
+                            contentTextarea.setAttribute('placeholder', 'Descrição da imagem...');
+                        } else if (type === 'video') {
+                            mediaInput.setAttribute('accept', 'video/*');
+                            contentTextarea.setAttribute('placeholder', 'Descrição do vídeo...');
+                        }
+                    }
+                });
+            });
+        }
+
+        // --- 2. Lógica de Upload da Foto de Perfil (CORREÇÃO APLICADA AQUI) ---
+        const myPicContainer = document.querySelector('.my-profile-pic-container');
+        const fileInput = document.getElementById('profile-pic-input');
+        const profilePicImg = document.getElementById('my-profile-pic');
+
+        if (myPicContainer && fileInput && profilePicImg) {
+            // Abre o seletor de arquivo ao clicar no avatar logado
+            myPicContainer.addEventListener('click', function() {
+                fileInput.click();
+            });
+
+            // Envia o formulário via Fetch API ao selecionar o arquivo
+            fileInput.addEventListener('change', function() {
+                if (fileInput.files.length > 0) {
+                    const formData = new FormData();
+                    formData.append('profile_pic_file', fileInput.files[0]);
+
+                    myPicContainer.style.cursor = 'wait';
+
+                    // O url_for AGORA É PROCESSADO CORRETAMENTE PELO JINJA2 NO TEMPLATE
+                    fetch("{{ url_for('upload_profile_pic') }}", {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => {
+                        myPicContainer.style.cursor = 'pointer';
+
+                        // Garante que a resposta é JSON e trata erros de resposta inesperada (HTML)
+                        if (!response.ok) {
+                            // Tenta ler o JSON de erro do backend
+                            return response.json().then(err => {
+                                throw new Error(err.message || 'Erro no servidor (código ' + response.status + ').');
+                            }).catch(() => {
+                                // Se falhar ao ler JSON, a resposta foi HTML ou texto puro.
+                                throw new Error('Resposta inesperada (HTML/Texto). Verifique o console do Flask.');
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            // Atualiza a imagem no DOM
+                            profilePicImg.src = data.new_pic_url;
+                            alert(data.message);
+                        } else {
+                            alert('Erro ao atualizar foto: ' + data.message);
+                        }
+                    })
+                    .catch(error => {
+                        myPicContainer.style.cursor = 'pointer';
+                        console.error('Erro de upload:', error);
+                        alert(`Falha no upload: ${error.message}`);
+                    });
+                }
+            });
+        }
+
+        // --- 3. Popup de Informações do Usuário (Modificado para excluir o usuário logado) ---
+        const userAvatars = document.querySelectorAll('.user-avatar');
+
+        userAvatars.forEach(avatar => {
+            const isMyAvatar = avatar.classList.contains('my-profile-pic-container');
+
+            // Ignora a lógica de popup para o avatar do usuário logado
+            if (isMyAvatar) {
+                return;
+            }
+
+            // Lógica de Popup para OUTROS avatares
+            avatar.addEventListener('mouseenter', function(e) {
+                clearTimeout(popupTimeout);
+
+                const userId = this.getAttribute('data-user-id');
+                if (!userId) return;
+
+                // Busca informações do usuário
+                fetch(`/get_user_info/${userId}`)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.error) {
+                            console.error(data.error);
+                            return;
+                        }
+
+                        // Posiciona e mostra o popup
+                        const rect = this.getBoundingClientRect();
+                        userPopup.style.left = `${rect.left + rect.width / 2}px`;
+                        userPopup.style.top = `${rect.bottom + 10}px`;
+                        userPopup.style.transform = 'translateX(-50%)';
+
+                        // Conteúdo do popup
+                        userPopup.innerHTML = `
+                            <div class="user-popup-header">
+                                <img src="${data.profile_pic}" alt="${data.username}">
+                                <h4>${data.username}</h4>
+                            </div>
+                            <div class="user-popup-bio">
+                                <p>${data.bio || 'Nenhuma descrição fornecida.'}</p>
+                            </div>
+                        `;
+
+                        userPopup.classList.add('active');
+                    })
+                    .catch(error => {
+                        console.error('Erro ao buscar informações do usuário:', error);
+                    });
+            });
+
+            avatar.addEventListener('mouseleave', function() {
+                popupTimeout = setTimeout(() => {
+                    userPopup.classList.remove('active');
+                }, 300);
+            });
+
+            // Para dispositivos touch
+            avatar.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                this.dispatchEvent(new Event('mouseenter'));
+            });
+
+            avatar.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                setTimeout(() => {
+                    userPopup.classList.remove('active');
+                }, 2000);
+            });
+        });
+
+        // Impede que o popup feche quando o mouse estiver sobre ele
+        userPopup.addEventListener('mouseenter', function() {
+            clearTimeout(popupTimeout);
+        });
+
+        userPopup.addEventListener('mouseleave', function() {
+            this.classList.remove('active');
+        });
+
+
+        // --- 4. Validação do formulário de postagem (Mantido) ---
+        const postForm = document.getElementById('post-form');
+        if (postForm) {
+            postForm.addEventListener('submit', function(e) {
+                const postType = postTypeInput.value;
+                const content = contentTextarea.value.trim();
+
+                if (postType === 'text' && content === '') {
+                    e.preventDefault();
+                    alert('Por favor, digite algum conteúdo para sua postagem de texto.');
+                    contentTextarea.focus();
+                    return;
+                }
+
+                if ((postType === 'image' || postType === 'video') && mediaInput.files.length === 0) {
+                    e.preventDefault();
+                    alert(`Por favor, selecione um arquivo para sua postagem de ${postType === 'image' ? 'imagem' : 'vídeo'}.`);
+                    return;
+                }
+            });
+        }
+    });
+</script>
+{% endblock %}
+
+{% block extra_styles %}
+<style>
+/* ... (Seu CSS para os estilos do feed e do avatar, incluindo .my-profile-pic-container) ... */
+/* Estilos para o container do avatar no header */
+.my-profile-pic-container {
+    position: relative;
+    width: 50px; /* Ajuste o tamanho do seu avatar */
+    height: 50px;
+    border-radius: 50%;
+    cursor: pointer;
+    overflow: hidden;
+    display: inline-block;
+    vertical-align: middle;
+    margin-right: 10px;
+}
+
+.my-profile-pic-container img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: filter 0.3s ease;
+}
+
+/* Oculta a overlay por padrão */
+.profile-pic-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    text-align: center;
+    font-size: 0.75em;
+    line-height: 1.1;
+}
+
+.profile-pic-overlay i {
+    font-size: 1.2em;
+    margin-bottom: 2px;
+}
+
+/* Efeito de hover: a overlay aparece e a imagem escurece */
+.my-profile-pic-container:hover .profile-pic-overlay {
+    opacity: 1;
+}
+
+.my-profile-pic-container:hover img {
+    filter: brightness(0.7);
+}
+
+.feed-header .user-info {
+    display: flex;
+    align-items: center;
+}
+</style>
 {% endblock %}
