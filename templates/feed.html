@@ -513,5 +513,28 @@
     display: flex;
     align-items: center;
 }
+.post {
+    /* Garante que o post tenha um limite de largura, se o layout principal não o fizer */
+    max-width: 600px; /* Escolha um valor adequado para a largura máxima da sua coluna de feed */
+    width: 100%; /* Garante que ele ocupe 100% da largura disponível até o max-width */
+    margin: 15px auto; /* Centraliza a postagem */
+    /* Outros estilos como borda e padding que você já deve ter */
+    box-sizing: border-box; /* Crucial para garantir que padding e border não causem estouro */
+}
+
+/* Garante que o conteúdo interno (onde a imagem está) respeite 100% do .post */
+.post-content {
+    /* Isso geralmente já é o padrão, mas vale a pena garantir */
+    width: 100%;
+    overflow-wrap: break-word; /* Ajuda se houver texto muito longo */
+}
+
+/* Mantém as regras que você já aplicou (mas certifique-se de que não há regras conflitantes mais abaixo) */
+.post-content .post-media-img,
+.post-content .post-media-video {
+    max-width: 100%;
+    height: auto;
+    display: block; /* Garante que a imagem se comporte como um bloco e preencha corretamente */
+}
 </style>
 {% endblock %}
