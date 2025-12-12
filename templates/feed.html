@@ -130,8 +130,6 @@
 <script>
     document.addEventListener('DOMContentLoaded', function() {
         // --- Variáveis Comuns ---
-        const userPopup = document.getElementById('user-popup');
-        let popupTimeout;
 
         // --- 1. Controle dos Tipos de Postagem (Mantido) ---
         const typeButtons = document.querySelectorAll('.type-btn');
@@ -170,14 +168,17 @@
             });
         }
 
-        // --- 2. Lógica de Upload da Foto de Perfil (CORREÇÃO DO URL AQUI!) ---
+               // --- 2. Lógica de Upload da Foto de Perfil (CORREÇÃO) ---
+        // SELETOR ESPECÍFICO APENAS PARA O AVATAR DO USUÁRIO LOGADO
         const myPicContainer = document.querySelector('.my-profile-pic-container');
         const fileInput = document.getElementById('profile-pic-input');
         const profilePicImg = document.getElementById('my-profile-pic');
 
         if (myPicContainer && fileInput && profilePicImg) {
             // A) Ao clicar no avatar logado, abre o seletor de arquivo
-            myPicContainer.addEventListener('click', function() {
+            myPicContainer.addEventListener('click', function(e) {
+                e.stopPropagation(); // IMPORTANTE: impede que o evento se propague
+                e.preventDefault(); // Impede comportamento padrão
                 fileInput.click();
             });
 
@@ -189,7 +190,6 @@
 
                     myPicContainer.style.cursor = 'wait';
 
-                    // O JINJA2 É PROCESSADO AGORA POR ESTAR DENTRO DO TEMPLATE HTML
                     fetch("{{ url_for('upload_profile_pic') }}", {
                         method: 'POST',
                         body: formData
@@ -207,7 +207,8 @@
                     })
                     .then(data => {
                         if (data.success) {
-                            profilePicImg.src = data.new_pic_url;
+                            // Adiciona timestamp para evitar cache
+                            profilePicImg.src = data.new_pic_url + '?t=' + new Date().getTime();
                             alert(data.message);
                         } else {
                             alert('Erro ao atualizar foto: ' + data.message);
@@ -222,15 +223,14 @@
             });
         }
 
-        // --- 3. Popup de Informações do Usuário (Mantido) ---
-        const userAvatars = document.querySelectorAll('.user-avatar');
+        // --- 3. Popup de Informações do Usuário (CORREÇÃO) ---
+        // SELETOR QUE EXCLUI O AVATAR DO USUÁRIO LOGADO
+        const userAvatars = document.querySelectorAll('.user-avatar:not(.my-profile-pic-container)');
+        const userPopup = document.getElementById('user-popup');
+        let popupTimeout;
 
         userAvatars.forEach(avatar => {
-            const isMyAvatar = avatar.classList.contains('my-profile-pic-container');
-
-            if (isMyAvatar) {
-                return;
-            }
+            // NÃO PRECISA MAIS VERIFICAR isMyAvatar pois o seletor já excluiu
 
             avatar.addEventListener('mouseenter', function(e) {
                 clearTimeout(popupTimeout);
