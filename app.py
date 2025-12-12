@@ -6,11 +6,23 @@ from werkzeug.utils import secure_filename
 from datetime import datetime
 from sqlalchemy.orm import joinedload, selectinload
 from dotenv import load_dotenv
+import cloudinary
+import cloudinary.uploader
+import cloudinary.api
+
 load_dotenv()
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'chave-super-ultra-secreta-db'
 
-# ===== CONFIGURAÇÕES ESSENCIAIS (DESCOMENTE!) =====
+# ===== CONFIGURAÇÃO DO CLOUDINARY =====
+cloudinary.config(
+    cloud_name='drcktqjp7',  # Seu cloud name'
+    api_key='448339431774236',     # Sua API key
+    api_secret=os.getenv('api'),             # SUA API SECRET AQUI
+    secure=True
+)
+
+# ===== CONFIGURAÇÕES ESSENCIAIS =====
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max
 
@@ -129,26 +141,34 @@ def register():
         password = request.form['password']
         bio = request.form.get('bio', '')
 
-        # Verifica se o usuário já existe
         if User.query.filter_by(username=username).first():
             return render_template('register.html', error='Nome de usuário já existe')
 
-        # Processa a foto de perfil
-        profile_pic = 'default.png'
+        # URL padrão do Cloudinary (ou uma imagem default no Cloudinary)
+        profile_pic_url = 'https://res.cloudinary.com/drcktqjp7/image/upload/v1700000000/default_profile.png'
+
+        # Se o usuário enviou foto no registro
         if 'profile_pic' in request.files:
             file = request.files['profile_pic']
             if file and file.filename != '' and allowed_file(file.filename):
-                filename = secure_filename(f"{username}_{file.filename}")
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                profile_pic = filename
+                # UPLOAD PARA CLOUDINARY
+                upload_result = cloudinary.uploader.upload(
+                    file,
+                    public_id=f"postaai/user_{username}_register",
+                    folder="postaai/profile_pics",
+                    transformation=[
+                        {'width': 300, 'height': 300, 'crop': 'fill', 'gravity': 'face'},
+                        {'quality': 'auto:good'}
+                    ]
+                )
+                profile_pic_url = upload_result['secure_url']
 
-        # Cria novo usuário
+        # Cria novo usuário com URL do Cloudinary
         new_user = User(
             username=username,
             password=generate_password_hash(password),
             bio=bio,
-            profile_pic=profile_pic
+            profile_pic=profile_pic_url  # ✅ Armazena URL completa
         )
 
         db.session.add(new_user)
@@ -177,41 +197,54 @@ def upload_profile_pic():
             return jsonify({'success': False, 'message': 'Nenhum arquivo selecionado'}), 400
 
         if file and allowed_file(file.filename):
-            file_ext = file.filename.rsplit('.', 1)[1].lower()
-            filename = secure_filename(f"{user_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}.{file_ext}")
+            # --- CLOUDINARY UPLOAD ---
+            # Lê o arquivo em memória
+            file_bytes = file.read()
 
-            save_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(save_path)
+            # Nome único para o arquivo no Cloudinary
+            public_id = f"postaai/user_{user_id}_profile"
 
+            # Faz upload para o Cloudinary
+            upload_result = cloudinary.uploader.upload(
+                file_bytes,
+                public_id=public_id,
+                folder="postaai/profile_pics",
+                overwrite=True,  # Substitui se já existir
+                transformation=[
+                    {'width': 300, 'height': 300, 'crop': 'fill', 'gravity': 'face'},
+                    {'quality': 'auto:good'},
+                    {'fetch_format': 'auto'}
+                ]
+            )
+
+            # URL segura da imagem
+            cloudinary_url = upload_result['secure_url']
+            print(f"✅ Foto enviada para Cloudinary: {cloudinary_url}")
+
+            # Atualiza no banco de dados
             user = User.query.get(user_id)
             if user:
-                if user.profile_pic != 'default.png':
-                    old_path = os.path.join(app.config['UPLOAD_FOLDER'], user.profile_pic)
-                    if os.path.exists(old_path):
-                        os.remove(old_path)
-
-                user.profile_pic = filename
+                # Armazena a URL do Cloudinary no banco
+                user.profile_pic = cloudinary_url  # Agora armazena URL completa
                 db.session.commit()
 
-                new_pic_url = url_for('static', filename=f'uploads/{filename}')
                 return jsonify({
                     'success': True,
-                    'message': 'Foto atualizada',
-                    'new_pic_url': new_pic_url
+                    'message': 'Foto atualizada com sucesso!',
+                    'new_pic_url': cloudinary_url  # Retorna URL completa
                 })
             else:
-                os.remove(save_path)
                 return jsonify({'success': False, 'message': 'Usuário não encontrado'}), 404
         else:
             return jsonify({'success': False, 'message': 'Extensão não permitida'}), 400
 
     except Exception as e:
-        print(f"ERRO: {e}")
+        print(f"❌ ERRO NO UPLOAD: {str(e)}")
         try:
             db.session.rollback()
         except:
             pass
-        return jsonify({'success': False, 'message': 'Erro interno'}), 500
+        return jsonify({'success': False, 'message': f'Erro interno: {str(e)}'}), 500
 
 
 @app.route('/feed')
@@ -228,16 +261,16 @@ def feed():
 
     profile_pic_filename = current_user.profile_pic
 
-    # **SOLUÇÃO SIMPLIFICADA:**
-    # Primeiro, pega todos os posts com autor
-    posts = Post.query.options(
-        joinedload(Post.author),
-        selectinload(Post.comments).joinedload(Comment.author)
-    ).order_by(Post.created_at.desc()).all()
+    # MÉTODO ALTERNATIVO: Busca tudo separadamente
+    # Busca todos os posts
+    all_posts = Post.query.order_by(Post.created_at.desc()).all()
 
-    # Depois, calcula likes e verifica se o usuário curtiu
+    # Busca autores para cada post
     posts_with_info = []
-    for post in posts:
+    for post in all_posts:
+        # Busca o autor do post
+        author = User.query.get(post.user_id)
+
         # Conta likes
         likes_count = Like.query.filter_by(post_id=post.id).count()
 
@@ -247,7 +280,14 @@ def feed():
             user_id=user_id
         ).first() is not None
 
-        # Adiciona informações ao post
+        # Busca comentários para este post
+        comments = Comment.query.filter_by(post_id=post.id) \
+            .order_by(Comment.created_at.asc()) \
+            .all()
+
+        # Adiciona autor e comentários ao objeto post
+        post.author = author
+        post.comments = comments
         post.likes_count = likes_count
         post.is_liked_by_user = is_liked_by_user
 
@@ -269,27 +309,36 @@ def create_post():
 
     content = request.form.get('content', '')
     post_type = 'text'
-    media_path = None
+    media_url = None
 
     # Processa arquivo
     if 'media' in request.files:
         file = request.files['media']
         if file and file.filename != '' and allowed_file(file.filename):
-            filename = secure_filename(
-                f"{session['user_id']}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{file.filename}")
-            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-            file.save(filepath)
-            media_path = filename
-
-            # Determina tipo
-            extension = filename.rsplit('.', 1)[1].lower()
+            # UPLOAD PARA CLOUDINARY
+            extension = file.filename.rsplit('.', 1)[1].lower()
             post_type = 'video' if extension in ['mp4', 'mov', 'avi'] else 'image'
+
+            resource_type = "video" if post_type == 'video' else "image"
+
+            upload_result = cloudinary.uploader.upload(
+                file,
+                resource_type=resource_type,
+                public_id=f"postaai/post_{session['user_id']}_{int(datetime.utcnow().timestamp())}",
+                folder=f"postaai/posts/{resource_type}s",
+                transformation=[
+                    {'width': 1200, 'crop': 'limit'} if post_type == 'image' else {},
+                    {'quality': 'auto:good'}
+                ]
+            )
+
+            media_url = upload_result['secure_url']
 
     new_post = Post(
         user_id=session['user_id'],
         content=content,
         type=post_type,
-        media_path=media_path
+        media_path=media_url  # ✅ Armazena URL do Cloudinary
     )
 
     db.session.add(new_post)

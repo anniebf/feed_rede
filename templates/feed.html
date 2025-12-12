@@ -7,12 +7,12 @@
         <div class="user-info logged-in-user">
             <div class="user-avatar my-profile-pic-container" data-user-id="{{ session['user_id'] }}">
                 <img id="my-profile-pic"
-                     src="{{ url_for('static', filename='uploads/' + my_profile_pic) }}"
+                     src="{{ my_profile_pic if my_profile_pic.startswith('http') else url_for('static', filename='uploads/' + my_profile_pic) }}"
                      alt="{{ username }}">
                 <div class="profile-pic-overlay" id="profile-pic-overlay">
                     <i class="fas fa-camera"></i>
                     <span>Alterar Foto</span>
-                </div>
+                </div>post.author.profile_pic)
             </div>
 
             <span>Olá, <strong>{{ username }}</strong>!</span>
@@ -53,7 +53,7 @@
                 <div class="post" data-post-id="{{ post.id }}">
                     <div class="post-header">
                         <div class="user-avatar" data-user-id="{{ post.author.id }}">
-                            <img src="{{ url_for('static', filename='uploads/' + post.author.profile_pic) }}" alt="{{ post.author.username }}">
+                            <img src="{{ post.author.profile_pic if post.author.profile_pic.startswith('http') else url_for('static', filename='uploads/' + post.author.profile_pic) }}" alt="{{ post.author.username }}">
                         </div>
                         <span class="post-username"><strong>{{ post.author.username }}</strong></span>
                         <span class="post-time">{{ post.created_at.strftime('%H:%M - %d/%m') }}</span>
